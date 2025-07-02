@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color Detector - Deteksi Warna Real-time</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .selection-box {
+            border: 2px dashed #3b82f6;
+            background-color: rgba(59, 130, 246, 0.1);
+            position: absolute;
+            pointer-events: none;
+        }
+        
+        .scanning-box {
+            border: 2px solid #22c55e;
+            background-color: rgba(34, 197, 94, 0.1);
+            position: absolute;
+            pointer-events: none;
+            animation: pulse-border 1s infinite;
+        }
+        
+        @keyframes pulse-border {
+            0%, 100% { border-color: #22c55e; }
+            50% { border-color: #16a34a; }
+        }
+        
+        .color-preview {
+            background: linear-gradient(45deg, 
+                transparent 25%, 
+                rgba(0,0,0,0.1) 25%, 
+                rgba(0,0,0,0.1) 50%, 
+                transparent 50%, 
+                transparent 75%, 
+                rgba(0,0,0,0.1) 75%);
+            background-size: 20px 20px;
+        }
+        
+        .glass-effect {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .webcam-container {
+            position: relative;
+            overflow: hidden;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        
+        .glow-effect {
+            box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
+        }
+        
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); }
+            50% { box-shadow: 0 0 40px rgba(34, 197, 94, 0.8); }
+        }
+        
+        .pulse-glow {
+            animation: pulse-glow 2s infinite;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-scanning {
+            background-color: #22c55e;
+            animation: pulse 1s infinite;
+        }
+        
+        .status-idle {
+            background-color: #6b7280;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
+    <div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="text-center mb-4">
+        <h1 class="text-5xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            🎨 Color Detector
+        </h1>
+        <!-- Developer Info -->
+        <div class="text-sm text-gray-400">
+            Built with ❤️ by <span class="font-semibold text-white">Yusma</span> —
+            <a href="https://github.com/namagithubmu" target="_blank" class="text-blue-400 hover:underline">GitHub</a> |
+            <a href="https://instagram.com/usernamekamu" target="_blank" class="text-pink-400 hover:underline">Instagram</a>
+        </div>
+        <p class="text-xl text-gray-300 mb-2">Real-time color detection using your webcam</p>
+    </div>
+
+
+    <!-- Main Content -->
+    <div class="grid lg:grid-cols-3 gap-8">
+        <!-- Webcam Section -->
+        <div class="lg:col-span-2">
+            <div class="glass-effect rounded-2xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center">
+                        <h2 class="text-2xl font-semibold">Live Camera</h2>
+                        <div class="ml-4 flex items-center text-sm">
+                            <span id="statusIndicator" class="status-indicator status-idle"></span>
+                            <span id="statusText">Idle</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="startBtn" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-all duration-300 pulse-glow">
+                            📹 Start Camera
+                        </button>
+                        <button id="stopBtn" class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-all duration-300" style="display: none;">
+                            ⏹️ Stop Camera
+                        </button>
+                        <button id="clearSelection" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg transition-all duration-300" style="display: none;">
+                            🗑️ Clear Selection
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="webcam-container">
+                    <video id="video" class="w-full h-auto rounded-xl" autoplay muted></video>
+                    <canvas id="overlay" class="absolute top-0 left-0 w-full h-full cursor-crosshair"></canvas>
+                    <div id="selectionBox" class="selection-box" style="display: none;"></div>
+                </div>
+                
+                <div class="mt-4 text-center text-sm text-gray-400">
+                    💡 Drag your mouse to create a scan area
+                </div>
+            </div>
+        </div>
+
+        <!-- Color Info Panel -->
+        <div class="space-y-6">
+            <!-- Current Color -->
+            <div class="glass-effect rounded-2xl p-6">
+                <h3 class="text-xl font-semibold mb-4">🎯 Detected Color</h3>
+                <div class="space-y-4">
+                    <div class="color-preview rounded-xl h-24 border-2 border-gray-600" id="colorPreview"></div>
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-300">HEX:</span>
+                            <div class="flex items-center gap-2">
+                                <span id="hexValue" class="font-mono text-blue-300">#000000</span>
+                                <span id="colorName" class="text-xs bg-blue-600 px-2 py-1 rounded-full">Black</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-300">RGB:</span>
+                            <span id="rgbValue" class="font-mono text-green-300">rgb(0, 0, 0)</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-300">HSL:</span>
+                            <span id="hslValue" class="font-mono text-purple-300">hsl(0, 0%, 0%)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Color History -->
+            <div class="glass-effect rounded-2xl p-6">
+                <h3 class="text-xl font-semibold mb-4">📚 Color History</h3>
+                <div id="colorHistory" class="space-y-2 max-h-64 overflow-y-auto">
+                    <div class="text-center text-gray-400 py-8">
+                        No colors detected yet
+                    </div>
+                </div>
+                <button id="clearHistory" class="w-full mt-4 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg transition-all duration-300">
+                    🗑️ Clear History
+                </button>
+            </div>
+
+            <!-- Instructions -->
+            <div class="glass-effect rounded-2xl p-6">
+                <h3 class="text-xl font-semibold mb-4">ℹ️ How to Use</h3>
+                <ul class="space-y-2 text-sm text-gray-300">
+                    <li>1. Click "Start Camera" to activate your webcam</li>
+                    <li>2. Drag your mouse to create a scan area box</li>
+                    <li>3. The area will be scanned in <strong>real-time</strong></li>
+                    <li>4. Detected colors will appear and update automatically</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Footer -->
+<div class="mt-12 text-center text-sm text-gray-400">
+    <p>Built with ❤️ by <span class="font-semibold text-white">Yusma</span></p>
+    <p>
+        👨‍💻 <a href="https://github.com/namagithubmu" target="_blank" class="text-blue-400 hover:underline">GitHub</a> | 
+        📷 <a href="https://instagram.com/usernamekamu" target="_blank" class="text-pink-400 hover:underline">Instagram</a>
+    </p>
+</div>
+
+
+
+    <script>
+        class ColorDetector {
+            constructor() {
+                this.video = document.getElementById('video');
+                this.overlay = document.getElementById('overlay');
+                this.ctx = this.overlay.getContext('2d');
+                this.selectionBox = document.getElementById('selectionBox');
+                this.statusIndicator = document.getElementById('statusIndicator');
+                this.statusText = document.getElementById('statusText');
+                
+                this.isSelecting = false;
+                this.isScanning = false;
+                this.startX = 0;
+                this.startY = 0;
+                this.colorHistory = [];
+                this.stream = null;
+                this.scanningArea = null;
+                this.animationId = null;
+                this.lastColorDetected = null;
+                this.frameCounter = 0;
+                
+                this.initializeEventListeners();
+            }
+
+            initializeEventListeners() {
+                document.getElementById('startBtn').addEventListener('click', () => this.startCamera());
+                document.getElementById('stopBtn').addEventListener('click', () => this.stopCamera());
+                document.getElementById('clearHistory').addEventListener('click', () => this.clearHistory());
+                document.getElementById('clearSelection').addEventListener('click', () => this.clearSelection());
+                
+                this.overlay.addEventListener('mousedown', (e) => this.startSelection(e));
+                this.overlay.addEventListener('mousemove', (e) => this.updateSelection(e));
+                this.overlay.addEventListener('mouseup', (e) => this.endSelection(e));
+                
+                // Add double-click for toggling scanning
+                this.overlay.addEventListener('dblclick', (e) => this.toggleScanning());
+            }
+
+            async startCamera() {
+                try {
+                    this.stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { 
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        } 
+                    });
+                    this.video.srcObject = this.stream;
+                    
+                    this.video.addEventListener('loadedmetadata', () => {
+                        this.resizeOverlay();
+                    });
+                    
+                    this.video.addEventListener('loadeddata', () => {
+                        this.resizeOverlay();
+                    });
+                    
+                    document.getElementById('startBtn').style.display = 'none';
+                    document.getElementById('stopBtn').style.display = 'block';
+                    document.getElementById('clearSelection').style.display = 'block';
+                    
+                } catch (err) {
+                    alert('Tidak dapat mengakses webcam: ' + err.message);
+                }
+            }
+
+            resizeOverlay() {
+                const videoRect = this.video.getBoundingClientRect();
+                this.overlay.width = this.video.videoWidth;
+                this.overlay.height = this.video.videoHeight;
+                this.overlay.style.width = videoRect.width + 'px';
+                this.overlay.style.height = videoRect.height + 'px';
+            }
+
+            stopCamera() {
+                if (this.stream) {
+                    this.stream.getTracks().forEach(track => track.stop());
+                    this.video.srcObject = null;
+                }
+                this.stopScanning();
+                document.getElementById('startBtn').style.display = 'block';
+                document.getElementById('stopBtn').style.display = 'none';
+                document.getElementById('clearSelection').style.display = 'none';
+                this.clearSelection();
+                this.updateStatus('idle');
+            }
+
+            startSelection(e) {
+                e.preventDefault();
+                
+                this.isSelecting = true;
+                const rect = this.overlay.getBoundingClientRect();
+                this.startX = (e.clientX - rect.left) * (this.overlay.width / rect.width);
+                this.startY = (e.clientY - rect.top) * (this.overlay.height / rect.height);
+                
+                this.selectionBox.style.display = 'block';
+                this.selectionBox.style.left = (this.startX * rect.width / this.overlay.width) + 'px';
+                this.selectionBox.style.top = (this.startY * rect.height / this.overlay.height) + 'px';
+                this.selectionBox.style.width = '0px';
+                this.selectionBox.style.height = '0px';
+                this.selectionBox.className = 'selection-box';
+                
+                // Stop scanning while selecting
+                this.stopScanning();
+            }
+
+            updateSelection(e) {
+                if (!this.isSelecting) return;
+                
+                const rect = this.overlay.getBoundingClientRect();
+                const currentX = (e.clientX - rect.left) * (this.overlay.width / rect.width);
+                const currentY = (e.clientY - rect.top) * (this.overlay.height / rect.height);
+                
+                const width = Math.abs(currentX - this.startX);
+                const height = Math.abs(currentY - this.startY);
+                const left = Math.min(currentX, this.startX);
+                const top = Math.min(currentY, this.startY);
+                
+                const displayWidth = width * rect.width / this.overlay.width;
+                const displayHeight = height * rect.height / this.overlay.height;
+                const displayLeft = left * rect.width / this.overlay.width;
+                const displayTop = top * rect.height / this.overlay.height;
+                
+                this.selectionBox.style.left = displayLeft + 'px';
+                this.selectionBox.style.top = displayTop + 'px';
+                this.selectionBox.style.width = displayWidth + 'px';
+                this.selectionBox.style.height = displayHeight + 'px';
+            }
+
+            endSelection(e) {
+                if (!this.isSelecting) return;
+                
+                e.preventDefault();
+                this.isSelecting = false;
+                
+                const rect = this.overlay.getBoundingClientRect();
+                const currentX = (e.clientX - rect.left) * (this.overlay.width / rect.width);
+                const currentY = (e.clientY - rect.top) * (this.overlay.height / rect.height);
+                
+                const width = Math.abs(currentX - this.startX);
+                const height = Math.abs(currentY - this.startY);
+                
+                if (width > 20 && height > 20) {
+                    const left = Math.min(currentX, this.startX);
+                    const top = Math.min(currentY, this.startY);
+                    
+                    this.scanningArea = {
+                        x: left,
+                        y: top,
+                        width: width,
+                        height: height
+                    };
+                    
+                    // Change selection box to scanning style
+                    this.selectionBox.className = 'scanning-box';
+                    
+                    // Start scanning immediately
+                    this.startScanning();
+                } else {
+                    this.clearSelection();
+                }
+            }
+
+            handleSingleClick(e) {
+                // Remove this function as we'll use double-click instead
+            }
+
+            toggleScanning() {
+                if (this.isScanning) {
+                    this.stopScanning();
+                } else if (this.scanningArea) {
+                    this.startScanning();
+                }
+            }
+
+            startScanning() {
+                if (!this.scanningArea || this.isScanning) return;
+                
+                this.isScanning = true;
+                this.updateStatus('scanning');
+                this.selectionBox.className = 'scanning-box';
+                this.continuousScanning();
+            }
+
+            stopScanning() {
+                this.isScanning = false;
+                this.updateStatus('idle');
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                    this.animationId = null;
+                }
+                if (this.scanningArea) {
+                    this.selectionBox.className = 'selection-box';
+                }
+            }
+
+            continuousScanning() {
+                if (!this.isScanning || !this.scanningArea) return;
+                
+                this.detectAreaColor();
+                this.animationId = requestAnimationFrame(() => this.continuousScanning());
+            }
+
+            detectAreaColor() {
+                if (!this.scanningArea || !this.video.videoWidth) return;
+                
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = this.video.videoWidth;
+                canvas.height = this.video.videoHeight;
+                
+                ctx.drawImage(this.video, 0, 0);
+                
+                const imageData = ctx.getImageData(
+                    Math.max(0, this.scanningArea.x),
+                    Math.max(0, this.scanningArea.y),
+                    Math.min(this.scanningArea.width, this.video.videoWidth - this.scanningArea.x),
+                    Math.min(this.scanningArea.height, this.video.videoHeight - this.scanningArea.y)
+                );
+                
+                const avgColor = this.calculateAverageColor(imageData.data);
+                
+                // Check if color has changed significantly
+                if (this.hasColorChanged(avgColor)) {
+                    this.updateColorDisplay(avgColor.r, avgColor.g, avgColor.b);
+                    this.lastColorDetected = avgColor;
+                    
+                    // Add to history every 15 frames to avoid spam but still be responsive
+                    this.frameCounter++;
+                    if (this.frameCounter % 15 === 0) {
+                        this.addToHistory(avgColor.r, avgColor.g, avgColor.b);
+                    }
+                }
+            }
+
+            hasColorChanged(newColor) {
+                if (!this.lastColorDetected) return true;
+                
+                const threshold = 0; // Color change threshold
+                const rDiff = Math.abs(newColor.r - this.lastColorDetected.r);
+                const gDiff = Math.abs(newColor.g - this.lastColorDetected.g);
+                const bDiff = Math.abs(newColor.b - this.lastColorDetected.b);
+                
+                return rDiff > threshold || gDiff > threshold || bDiff > threshold;
+            }
+
+            calculateAverageColor(data) {
+                let totalR = 0, totalG = 0, totalB = 0;
+                const pixelCount = data.length / 4;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    totalR += data[i];
+                    totalG += data[i + 1];
+                    totalB += data[i + 2];
+                }
+                
+                return {
+                    r: Math.round(totalR / pixelCount),
+                    g: Math.round(totalG / pixelCount),
+                    b: Math.round(totalB / pixelCount)
+                };
+            }
+
+            updateColorDisplay(r, g, b) {
+                const hex = this.rgbToHex(r, g, b);
+                const hsl = this.rgbToHsl(r, g, b);
+                const colorName = this.getColorName(r, g, b);
+                
+                document.getElementById('colorPreview').style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+                document.getElementById('hexValue').textContent = hex;
+                document.getElementById('colorName').textContent = colorName;
+                document.getElementById('rgbValue').textContent = `rgb(${r}, ${g}, ${b})`;
+                document.getElementById('hslValue').textContent = `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`;
+            }
+
+            addToHistory(r, g, b) {
+                const color = { r, g, b, timestamp: new Date() };
+                
+                // Avoid duplicate colors in history
+                const isDuplicate = this.colorHistory.some(c => 
+                    Math.abs(c.r - r) < 5 && Math.abs(c.g - g) < 5 && Math.abs(c.b - b) < 5
+                );
+                
+                if (!isDuplicate) {
+                    this.colorHistory.unshift(color);
+                    
+                    if (this.colorHistory.length > 5) {
+                        this.colorHistory.pop();
+                    }
+                    
+                    this.updateHistoryDisplay();
+                }
+            }
+
+            updateHistoryDisplay() {
+                const historyContainer = document.getElementById('colorHistory');
+                
+                if (this.colorHistory.length === 0) {
+                    historyContainer.innerHTML = '<div class="text-center text-gray-400 py-8">Belum ada warna yang terdeteksi</div>';
+                    return;
+                }
+                
+                historyContainer.innerHTML = this.colorHistory.map(color => `
+                    <div class="flex items-center gap-3 p-2 bg-white bg-opacity-10 rounded-lg">
+                        <div class="w-8 h-8 rounded-full border-2 border-gray-500" style="background-color: rgb(${color.r}, ${color.g}, ${color.b})"></div>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono text-sm">${this.rgbToHex(color.r, color.g, color.b)}</span>
+                                <span class="text-xs bg-gray-600 px-2 py-1 rounded-full">${this.getColorName(color.r, color.g, color.b)}</span>
+                            </div>
+                            <div class="text-xs text-gray-400">rgb(${color.r}, ${color.g}, ${color.b})</div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            clearHistory() {
+                this.colorHistory = [];
+                this.updateHistoryDisplay();
+            }
+
+            clearSelection() {
+                this.stopScanning();
+                this.scanningArea = null;
+                this.selectionBox.style.display = 'none';
+                this.lastColorDetected = null;
+                this.frameCounter = 0;
+            }
+
+            updateStatus(status) {
+                const indicator = this.statusIndicator;
+                const text = this.statusText;
+                
+                if (status === 'scanning') {
+                    indicator.className = 'status-indicator status-scanning';
+                    text.textContent = 'Scanning...';
+                } else {
+                    indicator.className = 'status-indicator status-idle';
+                    text.textContent = 'Idle';
+                }
+            }
+
+            rgbToHex(r, g, b) {
+                return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+            }
+
+            rgbToHsl(r, g, b) {
+                r /= 255;
+                g /= 255;
+                b /= 255;
+                
+                const max = Math.max(r, g, b);
+                const min = Math.min(r, g, b);
+                let h, s, l = (max + min) / 2;
+                
+                if (max === min) {
+                    h = s = 0;
+                } else {
+                    const d = max - min;
+                    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                    
+                    switch (max) {
+                        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                        case g: h = (b - r) / d + 2; break;
+                        case b: h = (r - g) / d + 4; break;
+                    }
+                    h /= 6;
+                }
+                
+                return {
+                    h: Math.round(h * 360),
+                    s: Math.round(s * 100),
+                    l: Math.round(l * 100)
+                };
+            }
+
+            getColorName(r, g, b) {
+                const colors = [
+                    {name: "Black", r: 0, g: 0, b: 0},
+                    {name: "White", r: 255, g: 255, b: 255},
+                    {name: "Red", r: 255, g: 0, b: 0},
+                    {name: "Green", r: 0, g: 128, b: 0},
+                    {name: "Blue", r: 0, g: 0, b: 255},
+                    {name: "Yellow", r: 255, g: 255, b: 0},
+                    {name: "Cyan", r: 0, g: 255, b: 255},
+                    {name: "Magenta", r: 255, g: 0, b: 255},
+                    {name: "Orange", r: 255, g: 165, b: 0},
+                    {name: "Purple", r: 128, g: 0, b: 128},
+                    {name: "Pink", r: 255, g: 192, b: 203},
+                    {name: "Brown", r: 165, g: 42, b: 42},
+                    {name: "Gray", r: 128, g: 128, b: 128},
+                    {name: "Dark Gray", r: 64, g: 64, b: 64},
+                    {name: "Light Gray", r: 192, g: 192, b: 192},
+                    {name: "Navy", r: 0, g: 0, b: 128},
+                    {name: "Lime", r: 0, g: 255, b: 0},
+                    {name: "Maroon", r: 128, g: 0, b: 0},
+                    {name: "Olive", r: 128, g: 128, b: 0},
+                    {name: "Teal", r: 0, g: 128, b: 128},
+                    {name: "Silver", r: 192, g: 192, b: 192},
+                    {name: "Gold", r: 255, g: 215, b: 0},
+                    {name: "Indigo", r: 75, g: 0, b: 130},
+                    {name: "Violet", r: 238, g: 130, b: 238},
+                    {name: "Turquoise", r: 64, g: 224, b: 208},
+                    {name: "Coral", r: 255, g: 127, b: 80},
+                    {name: "Salmon", r: 250, g: 128, b: 114},
+                    {name: "Khaki", r: 240, g: 230, b: 140},
+                    {name: "Lavender", r: 230, g: 230, b: 250},
+                    {name: "Beige", r: 245, g: 245, b: 220}
+                ];
+
+                let minDistance = Infinity;
+                let closestColor = "Unknown";
+
+                for (let color of colors) {
+                    const distance = Math.sqrt(
+                        Math.pow(r - color.r, 2) + 
+                        Math.pow(g - color.g, 2) + 
+                        Math.pow(b - color.b, 2)
+                    );
+                    
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        closestColor = color.name;
+                    }
+                }
+
+                const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
+                const saturation = Math.max(r, g, b) - Math.min(r, g, b);
+                
+                if (saturation < 30) {
+                    if (brightness < 50) return "Very Dark Gray";
+                    else if (brightness < 100) return "Dark Gray";
+                    else if (brightness < 150) return "Gray";
+                    else if (brightness < 200) return "Light Gray";
+                    else return "Very Light Gray";
+                }
+                
+                if (brightness < 80) {
+                    return "Dark " + closestColor;
+                } else if (brightness > 200 && saturation > 50) {
+                    return "Light " + closestColor;
+                }
+                
+                return closestColor;
+            }
+        }
+
+        // Initialize the app
+        const colorDetector = new ColorDetector();
+    </script>
+</body>
+</html>
